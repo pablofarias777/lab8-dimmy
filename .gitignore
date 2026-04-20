@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+venv/
+
+# Training outputs
+outputs/
+checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
