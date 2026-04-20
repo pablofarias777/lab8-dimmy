@@ -1,4 +1,4 @@
-"""Pipeline base para treinamento com DPOTrainer."""
+"""Pipeline de treinamento com DPOTrainer."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ REQUIRED_COLUMNS = ("prompt", "chosen", "rejected")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Pipeline base de DPO.")
+    parser = argparse.ArgumentParser(description="Pipeline de DPO.")
     parser.add_argument(
         "--dataset-path",
         type=Path,
@@ -44,6 +44,29 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=512,
         help="Tamanho maximo de contexto usado no DPO.",
+    )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=0.1,
+        help="Hiperparametro beta do DPO.",
+    )
+    parser.add_argument(
+        "--num-train-epochs",
+        type=float,
+        default=1.0,
+        help="Numero de epocas de treino.",
+    )
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=5e-6,
+        help="Learning rate do otimizador.",
+    )
+    parser.add_argument(
+        "--skip-train",
+        action="store_true",
+        help="Se informado, apenas inicializa o pipeline sem treinar.",
     )
     return parser.parse_args()
 
@@ -85,10 +108,14 @@ def build_trainer(args: argparse.Namespace) -> DPOTrainer:
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=1,
-        num_train_epochs=1,
+        gradient_accumulation_steps=4,
+        num_train_epochs=args.num_train_epochs,
+        learning_rate=args.learning_rate,
         logging_steps=1,
         save_steps=20,
-        learning_rate=5e-6,
+        optim="paged_adamw_32bit",
+        bf16=False,
+        fp16=False,
         remove_unused_columns=False,
         report_to="none",
     )
@@ -100,6 +127,7 @@ def build_trainer(args: argparse.Namespace) -> DPOTrainer:
         train_dataset=dataset,
         processing_class=tokenizer,
         max_length=args.max_length,
+        beta=args.beta,
     )
     return trainer
 
@@ -107,9 +135,20 @@ def build_trainer(args: argparse.Namespace) -> DPOTrainer:
 def main() -> None:
     args = parse_args()
     trainer = build_trainer(args)
+
     print("Pipeline DPO inicializado com sucesso.")
     print(f"Exemplos no dataset: {len(trainer.train_dataset)}")
-    print("Pronto para executar trainer.train() no proximo passo.")
+    print(f"Beta configurado: {args.beta}")
+
+    if args.skip_train:
+        print("Treino nao executado (--skip-train).")
+        return
+
+    print("Iniciando treinamento DPO...")
+    trainer.train()
+    trainer.save_model(args.output_dir)
+    trainer.processing_class.save_pretrained(args.output_dir)
+    print(f"Treinamento finalizado. Modelo salvo em: {args.output_dir}")
 
 
 if __name__ == "__main__":
