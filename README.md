@@ -8,6 +8,6 @@ Este repositório contém a implementação do laboratório de alinhamento human
 - `src/`: código principal de treinamento e inferência
 - `scripts/`: utilitários para execução local
 
-## Status
 
-Projeto em desenvolvimento passo a passo com versionamento em commits pequenos.
+
+
