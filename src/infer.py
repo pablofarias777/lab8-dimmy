@@ -113,14 +113,19 @@ def generate_answer(
 def main() -> None:
     args = parse_args()
     example = find_example(args.dataset_path, args.prompt)
+    model_path = Path(args.model_path)
+    if not model_path.exists() or not model_path.is_dir():
+        raise FileNotFoundError(
+            f"Modelo local nao encontrado em '{args.model_path}'. Rode o treino antes de executar a inferencia."
+        )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+    tokenizer = AutoTokenizer.from_pretrained(str(model_path), local_files_only=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(args.model_path)
+    model = AutoModelForCausalLM.from_pretrained(str(model_path), local_files_only=True)
     model.to(device)
     model.eval()
 

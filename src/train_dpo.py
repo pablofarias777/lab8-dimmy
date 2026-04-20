@@ -6,9 +6,10 @@ import argparse
 import json
 from pathlib import Path
 
+import torch
 from datasets import Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
-from trl import DPOTrainer
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from trl import DPOConfig, DPOTrainer
 
 REQUIRED_COLUMNS = ("prompt", "chosen", "rejected")
 
@@ -68,7 +69,21 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Se informado, apenas inicializa o pipeline sem treinar.",
     )
+    parser.add_argument(
+        "--optim",
+        type=str,
+        default=None,
+        help="Otimizador do treino. Se omitido, seleciona automaticamente.",
+    )
     return parser.parse_args()
+
+
+def resolve_optimizer(requested_optim: str | None) -> str:
+    if requested_optim:
+        return requested_optim
+    if torch.cuda.is_available():
+        return "paged_adamw_32bit"
+    return "adamw_torch"
 
 
 def load_preference_dataset(path: Path) -> Dataset:
@@ -105,7 +120,7 @@ def build_trainer(args: argparse.Namespace) -> DPOTrainer:
     ref_model_name = args.ref_model_name or args.model_name
     ref_model = AutoModelForCausalLM.from_pretrained(ref_model_name)
 
-    training_args = TrainingArguments(
+    training_args = DPOConfig(
         output_dir=args.output_dir,
         per_device_train_batch_size=1,
         gradient_accumulation_steps=4,
@@ -113,11 +128,13 @@ def build_trainer(args: argparse.Namespace) -> DPOTrainer:
         learning_rate=args.learning_rate,
         logging_steps=1,
         save_steps=20,
-        optim="paged_adamw_32bit",
+        optim=resolve_optimizer(args.optim),
         bf16=False,
         fp16=False,
         remove_unused_columns=False,
         report_to="none",
+        max_length=args.max_length,
+        beta=args.beta,
     )
 
     trainer = DPOTrainer(
@@ -126,8 +143,6 @@ def build_trainer(args: argparse.Namespace) -> DPOTrainer:
         args=training_args,
         train_dataset=dataset,
         processing_class=tokenizer,
-        max_length=args.max_length,
-        beta=args.beta,
     )
     return trainer
 
@@ -139,6 +154,7 @@ def main() -> None:
     print("Pipeline DPO inicializado com sucesso.")
     print(f"Exemplos no dataset: {len(trainer.train_dataset)}")
     print(f"Beta configurado: {args.beta}")
+    print(f"Otimizador: {trainer.args.optim}")
 
     if args.skip_train:
         print("Treino nao executado (--skip-train).")
